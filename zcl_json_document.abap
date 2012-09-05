@@ -761,6 +761,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
     else.
 
+      check me->json is not initial.  "Codexch issue #1 CX_SY_RANGE_OUT_OF_BOUNDS
+
       case me->json(1).
         when '['.
           parse_array( ).
