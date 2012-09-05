@@ -602,6 +602,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
       lv_json = me->json.
     endif.
 
+    clear data.
+
     "*--- create new JSON document (recursive!) ---*
     lr_json_doc = zcl_json_document=>create_with_json( lv_json ).
     lr_json_doc->parse( ).
@@ -666,7 +668,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
     if me->json is initial.
     else.
-      if me->json+0(1) ne `{`.
+      if  me->json+0(1) ne `{`
+      and me->json+0(1) ne `[`.    "sapcodexch issue #7
 
         "*--- key/value pair only (sapcodexch issue #3) ---*
         find regex '"*":' in me->json.
@@ -675,15 +678,20 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
           concatenate '{' me->json into me->json.             "<= 7.01
         endif.
       endif.
+
       data len type i.
       len = strlen( me->json ) - 1.
-      if me->json+len(1) ne `}`.
+
+      if  me->json+len(1) ne `}`
+      and me->json+len(1) ne `]`.  "sapcodexch issue #7
+
         "*--- key/value pair only (sapcodexch issue #3) ---*
         find regex '"*":' in me->json.
         if sy-subrc = 0.
 *      me->json =   me->json && `}`.           ">= 7.02
           concatenate me->json '}'  into me->json.            "<= 7.01
         endif.
+
       endif.
     endif.
     json = me->json.
@@ -818,6 +826,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
       translate comp_name to lower case.
       lv_json = me->get_value( comp_name ).
 
+      check lv_json is not initial.    "value found?  "sapcodexch issue #6
+
       "*--- and again -> recursive! ---*
       me->get_data(
         exporting json = lv_json
@@ -866,6 +876,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
         comp_name = <component>-name.
         translate comp_name to lower case.
         lv_json = me->get_value( comp_name ).
+
+        check lv_json is not initial.    "value found?  "sapcodexch issue #6
 
         "*--- and again -> recursive! ---*
         me->get_data(
@@ -1099,6 +1111,8 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
     clear json.
     add_data( data ).
+
+    parse( ).
 
   endmethod.                    "SET_DATA
 
