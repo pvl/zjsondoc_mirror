@@ -129,7 +129,7 @@ class zcl_json_document definition
     methods get_table
       changing
         !table type any table .
-endclass.                    "ZCL_JSON_DOCUMENT DEFINITION
+endclass.                    "zcl_json_document DEFINITION
 
 
 
@@ -746,6 +746,8 @@ class zcl_json_document implementation.
 
     constants : c_echap type c value '\'.
 
+    check json cs c_echap.      "codexch issue #21
+
     loop at match_result into lv_tab.
       find all occurrences of '"' in json+offset(lv_tab-offset) results lt_result_tabguillemet.
       clear lv_count.
@@ -905,7 +907,9 @@ class zcl_json_document implementation.
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method get_next.
 
-    data: lv_json type string.
+    data lv_json   type string.
+    data lt_data   like me->data_t.
+    data lv_cursor like me->array_cursor.
 
     add 1 to me->array_cursor.
 
@@ -913,7 +917,14 @@ class zcl_json_document implementation.
     read table me->data_t index me->array_cursor into lv_json.
 
     if sy-subrc = 0.
+      lt_data = me->data_t.    "save data_t (nasted for tables)    codexch issue #20
+      lv_cursor = me->array_cursor.
+
       set_json( lv_json ).
+
+      me->data_t = lt_data.    "restore data_t (nasted for tables) codexch issue #20
+      me->array_cursor = lv_cursor.
+
       data_found = abap_true.
     endif.
 
@@ -1204,10 +1215,8 @@ class zcl_json_document implementation.
     clear me->data_t.
     clear me->array_cursor.
 
-    shift lv_json left.
-    shift lv_json right deleting trailing ']'.
-
-    shift lv_json left deleting leading space.
+    replace regex '^\[' in lv_json with ``.   "codexch issue #20
+    replace regex '\]$' in lv_json with ``.   "codexch issue #20
 
     while not lv_json co space.
 
@@ -1358,8 +1367,9 @@ class zcl_json_document implementation.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
-* | Instance Private Method ZCL_JSON_DOCUMENT->SET_SUPPRESS_ITAB
+* | Instance Public Method ZCL_JSON_DOCUMENT->SET_SUPPRESS_ITAB
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] SUPPRESS_ITAB                  TYPE        BOOLEAN
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method set_suppress_itab.
 

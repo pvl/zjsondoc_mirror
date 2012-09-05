@@ -28,6 +28,7 @@ class lcl_zjson definition final for testing
 
     methods: test_number              for testing,
              test_string_number       for testing,
+             test_string_escape       for testing,
              test_string_number_struc for testing,
              test_number_struct       for testing,
              test_append_data         for testing,
@@ -114,6 +115,26 @@ class lcl_zjson implementation.
     json_doc2->get_data( importing data = t_str2 ).
     cl_aunit_assert=>assert_equals( exp = t_str
                                     act = t_str2 ).
+
+  endmethod.                    "test_string_number
+
+  method test_string_escape.
+
+    data: begin of t_struc,
+              abc type string value 'def:"123}',
+           end of t_struc.
+    data t_str type string.
+
+    json_doc = zcl_json_document=>create_with_data( t_struc ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = '{"abc" :"def:\"123}"}'
+                                    act = json_str ).
+
+    json_doc = zcl_json_document=>create_with_json( json_str ).
+    t_str = json_doc->get_value( 'abc' ).
+
+    cl_aunit_assert=>assert_equals( exp = 'def:\"123}'
+                                    act = t_str ).
 
   endmethod.                    "test_string_number
 
