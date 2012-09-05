@@ -1049,6 +1049,7 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
       subtract 2 from lv_close.
       ls_key_value-key = lv_json+1(lv_close).
+      translate ls_key_value-key to lower case.   "sapcodexch ticket #5
 
       "*--- get value ---*
       shift lv_json left up to ':'.
