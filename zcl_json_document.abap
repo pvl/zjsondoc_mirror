@@ -123,7 +123,7 @@ class zcl_json_document definition
     methods get_table
       changing
         !table type any table .
-endclass.                    "zcl_json_document DEFINITION
+endclass.                    "ZCL_JSON_DOCUMENT DEFINITION
 
 
 
@@ -573,7 +573,8 @@ class zcl_json_document implementation.
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method dumps.
 
-    data: json_tmp   type string
+    data: json_doc   type ref to zcl_json_document
+        , json_tmp   type string
         , data_tmp   type zjson_key_value_t
         , data_t_tmp type string_table
         , intend     type i
@@ -637,9 +638,10 @@ class zcl_json_document implementation.
             endif.
 
           else.
-
-            me->dumps( exporting json = <data_line>-value current_intend = intend
-                       importing result = dump ).
+            clear dump.
+            json_doc = zcl_json_document=>create_with_json( <data_line>-value ).
+            json_doc->dumps( exporting current_intend = intend
+                             importing result = dump ).
             insert lines of dump into table result.
             read table result index lines( result ) assigning <result_line>.
 
@@ -685,8 +687,11 @@ class zcl_json_document implementation.
 
             <result_line> = |{ <result_line> }"{ <data_t_line> }"|.
           else.
-            me->dumps( exporting json = <data_t_line> current_intend = intend
-                       importing result = result ).
+            clear dump.
+            json_doc = zcl_json_document=>create_with_json( <data_t_line> ).
+            json_doc->dumps( exporting current_intend = intend
+                             importing result = dump ).
+            insert lines of dump into table result.
             read table result index lines( result ) assigning <result_line>.
           endif.
           if tabix < lines( data_t_tmp ).
