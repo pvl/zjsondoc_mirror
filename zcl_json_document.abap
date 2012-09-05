@@ -23,6 +23,7 @@ class zcl_json_document definition
     class-methods create_with_data
       importing
         !data type any
+        !suppress_itab type boolean optional
       returning
         value(json_document) type ref to zcl_json_document .
     methods set_json
@@ -33,7 +34,8 @@ class zcl_json_document definition
         value(json) type string .
     methods set_data
       importing
-        !data type any .
+        !data type any
+        !suppress_itab type boolean optional .
     methods get_data
       importing
         !json type string optional
@@ -63,6 +65,9 @@ class zcl_json_document definition
         !current_intend type i optional
       exporting
         !result type string_table .
+    methods set_suppress_itab
+      importing
+        !suppress_itab type boolean .
   protected section.
 *"* protected components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
@@ -74,6 +79,7 @@ class zcl_json_document definition
     data data type zjson_key_value_t .
     data data_t type string_table .
     data array_cursor type i .
+    data suppress_itab type boolean .
 
     class-methods copyright .
     methods parse
@@ -156,8 +162,7 @@ class zcl_json_document implementation.
 
         add_stru( data ).
 
-      when data_descr->typekind_num          "charlike incl. NUMC
-      or   data_descr->typekind_char
+      when data_descr->typekind_char
       or   data_descr->typekind_string
       or   data_descr->typekind_clike
       or   data_descr->typekind_csequence.
@@ -167,7 +172,8 @@ class zcl_json_document implementation.
       when data_descr->typekind_int
       or   data_descr->typekind_int1
       or   data_descr->typekind_int2
-      or   data_descr->typekind_packed.
+      or   data_descr->typekind_packed
+      or   data_descr->typekind_num.          "charlike incl. NUMC.
 
         add_number( data ).
 
@@ -247,6 +253,9 @@ class zcl_json_document implementation.
       shift lv_num_c right up to '-'.
       shift lv_num_c circular right.
     endif.
+
+    "*--- store NUMC without leading zero (sapcodexch #issue 17) ---*
+    shift lv_num_c left deleting leading '0'.
 
     condense lv_num_c no-gaps.
 
@@ -366,7 +375,8 @@ class zcl_json_document implementation.
 
     data lv_end type boolean.
 
-    if strlen( json ) > 3.
+    if strlen( json ) > 3
+    or suppress_itab = abap_true. "sapcodexch issue #13
       concatenate
         json
         ' ['
@@ -540,12 +550,16 @@ class zcl_json_document implementation.
 * | Static Public Method ZCL_JSON_DOCUMENT=>CREATE_WITH_DATA
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] DATA                           TYPE        ANY
+* | [--->] SUPPRESS_ITAB                  TYPE        BOOLEAN(optional)
 * | [<-()] JSON_DOCUMENT                  TYPE REF TO ZCL_JSON_DOCUMENT
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method create_with_data.
 
     create object json_document.
-    json_document->set_data( data ).
+    json_document->set_data(
+      data          = data
+      suppress_itab = suppress_itab
+      ).
 
   endmethod.                    "CREATE_WITH_DATA
 
@@ -631,7 +645,8 @@ class zcl_json_document implementation.
 
           elseif <data_line>-value(1) cn '{['.
 
-            if <data_line>-value co '0123456789.'.
+            if <data_line>-value co '0123456789.'
+            and <data_line>-value(1) <> '0'.        "no leading zero (else asume a string)
               <result_line> = |{ <result_line> }{ <data_line>-value }|.
             else.
               <result_line> = |{ <result_line> }"{ <data_line>-value }"|.
@@ -759,6 +774,7 @@ class zcl_json_document implementation.
     data: lr_json_doc type ref to zcl_json_document.
     data: lv_json     type string.
     data: tmp         type c length 10.
+    data: lv_submatch type string.
 
     if json is not initial.
       lv_json = json.
@@ -776,13 +792,23 @@ class zcl_json_document implementation.
 
     case data_descr->type_kind.
 
-      when data_descr->typekind_num          "charlike incl. NUMC
-      or   data_descr->typekind_char
+      when data_descr->typekind_char         "charlike
       or   data_descr->typekind_string
       or   data_descr->typekind_clike
-      or   data_descr->typekind_csequence
+      or   data_descr->typekind_csequence.
 
-      or   data_descr->typekind_int          "integer + packed (auto conversion)
+        data = lr_json_doc->get_json( ).
+
+        "*--- eliminate surrounding " ---*
+        find regex '"(.{1,})"' in data     "get 1-n chars surrounded by "
+          submatches lv_submatch.
+
+        if sy-subrc = 0.
+          data = lv_submatch.
+        endif.
+
+      when data_descr->typekind_num          "NUM + integer + packed (auto conversion)
+      or   data_descr->typekind_int
       or   data_descr->typekind_int1
       or   data_descr->typekind_int2
       or   data_descr->typekind_packed
@@ -868,6 +894,7 @@ class zcl_json_document implementation.
     endif.
     json = me->json.
 
+    shift json left deleting leading space.
   endmethod.                    "GET_JSON
 
 
@@ -1019,6 +1046,7 @@ class zcl_json_document implementation.
   method get_table.
 
     data: table_descr  type ref to cl_abap_tabledescr
+        , data_descr   type ref to cl_abap_datadescr
         , stru_descr   type ref to cl_abap_structdescr
         , comp_name    type string
         , lv_json      type string
@@ -1034,30 +1062,47 @@ class zcl_json_document implementation.
     "*--- currently only standard tables possible (no hashed/sorted) ---*
     check table_descr->table_kind = table_descr->tablekind_std.
 
-    stru_descr ?= table_descr->get_table_line_type( ).
+    data_descr ?= table_descr->get_table_line_type( ).
+
+    "*--- check structure or simple ---*
+    if data_descr->type_kind = data_descr->typekind_struct1     "flat strcuture
+    or data_descr->type_kind = data_descr->typekind_struct2.    "deep strcuture
+      stru_descr ?= data_descr.
+    endif.
 
     while me->get_next( ) is not initial.
 
       insert initial line into table table assigning <line>.
 
-      loop at stru_descr->components
-        assigning <component>.
+      if stru_descr is not bound.    "table line is not a structure
 
-        assign component <component>-name of structure <line> to <value>.
-
-        comp_name = <component>-name.
-        translate comp_name to lower case.
-        lv_json = me->get_value( comp_name ).
-
-        check lv_json is not initial.    "value found?  "sapcodexch issue #6
-
-        "*--- and again -> recursive! ---*
         me->get_data(
           exporting json = lv_json
-          importing data = <value>
+          importing data = <line>
           ).
 
-      endloop.
+      else.
+
+        loop at stru_descr->components
+          assigning <component>.
+
+          assign component <component>-name of structure <line> to <value>.
+
+          comp_name = <component>-name.
+          translate comp_name to lower case.
+          lv_json = me->get_value( comp_name ).
+
+          check lv_json is not initial.    "value found?  "sapcodexch issue #6
+
+          "*--- and again -> recursive! ---*
+          me->get_data(
+            exporting json = lv_json
+            importing data = <value>
+            ).
+
+        endloop.
+
+      endif.
 
     endwhile.
 
@@ -1278,8 +1323,11 @@ class zcl_json_document implementation.
 * | Instance Public Method ZCL_JSON_DOCUMENT->SET_DATA
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] DATA                           TYPE        ANY
+* | [--->] SUPPRESS_ITAB                  TYPE        BOOLEAN(optional)
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method set_data.
+
+    set_suppress_itab( suppress_itab ).
 
     clear json.
     add_data( data ).
@@ -1307,4 +1355,15 @@ class zcl_json_document implementation.
     parse( ).
 
   endmethod.                    "SET_JSON
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_JSON_DOCUMENT->SET_SUPPRESS_ITAB
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method set_suppress_itab.
+
+    me->suppress_itab = suppress_itab.
+
+  endmethod.                    "SET_SUPPRESS_ITAB
 endclass.                    "ZCL_JSON_DOCUMENT IMPLEMENTATION
