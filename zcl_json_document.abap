@@ -57,6 +57,12 @@ class zcl_json_document definition
         !key type string
       returning
         value(value) type i .
+    methods dumps
+      importing
+        !json type string optional
+        !current_intend type i optional
+      exporting
+        !result type string_table .
   protected section.
 *"* protected components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
@@ -117,11 +123,16 @@ class zcl_json_document definition
     methods get_table
       changing
         !table type any table .
-ENDCLASS.
+endclass.                    "ZCL_JSON_DOCUMENT DEFINITION
 
 
 
-CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
+*----------------------------------------------------------------------*
+*       CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+class zcl_json_document implementation.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -550,6 +561,140 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON_DOCUMENT->DUMPS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] JSON                           TYPE        STRING(optional)
+* | [--->] CURRENT_INTEND                 TYPE        I(optional)
+* | [<---] RESULT                         TYPE        STRING_TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method dumps.
+
+    data: json_tmp   type string
+        , data_tmp   type zjson_key_value_t
+        , data_t_tmp type string_table
+        , intend     type i
+        , tabix      type sytabix
+        , dump       type string_table
+        .
+
+    field-symbols: <data_line>   type zjson_key_value
+                 , <data_t_line> type string
+                 , <result_line> type string
+                 .
+
+    if json is not initial.
+      json_tmp = json.
+    else.
+      json_tmp = me->json.
+    endif.
+
+    shift json_tmp left deleting leading space.
+    me->json = json_tmp.
+
+    intend = current_intend.
+
+    case json_tmp(1).
+      when '{'.
+        parse_object( ).
+
+        insert initial line into table result assigning <result_line>.
+        do intend times.
+          <result_line> = <result_line> && ` `.
+        enddo.
+        <result_line> = <result_line> && `{`.
+        add 4 to intend.
+
+        clear tabix.
+
+        data_tmp = me->data.
+
+        loop at data_tmp
+          assigning <data_line>.
+
+          add 1 to tabix.          "sy-tabix doesn't work here
+
+          insert initial line into table result assigning <result_line>.
+          do intend times.
+            <result_line> = <result_line> && ` `.
+          enddo.
+
+          <result_line> = |{ <result_line> }"{ <data_line>-key }" : |.
+
+          if <data_line>-value(1) cn '{['.
+            if <data_line>-value co '0123456789.'.
+              <result_line> = |{ <result_line> }{ <data_line>-value }|.
+            else.
+              <result_line> = |{ <result_line> }"{ <data_line>-value }"|.
+            endif.
+          else.
+            me->dumps( exporting json = <data_line>-value current_intend = intend
+                       importing result = dump ).
+            insert lines of dump into table result.
+            read table result index lines( result ) assigning <result_line>.
+          endif.
+          if tabix < lines( data_tmp ).
+            <result_line> = <result_line> && `,`.
+          endif.
+
+        endloop.
+
+        subtract 4 from intend.
+        insert initial line into table result assigning <result_line>.
+        do intend times.
+          <result_line> = <result_line> && ` `.
+        enddo.
+        <result_line> = <result_line> && `}`.
+
+      when '['.
+        parse_array( ).
+
+        insert initial line into table result assigning <result_line>.
+        do intend times.
+          <result_line> = <result_line> && ` `.
+        enddo.
+        <result_line> = <result_line> && `[`.
+        add 4 to intend.
+
+        clear tabix.
+
+        data_t_tmp = me->data_t.
+
+        loop at data_t_tmp
+          assigning <data_t_line>.
+
+          add 1 to tabix.          "sy-tabix doesn't work here
+
+          if <data_t_line>(1) cn '{['.
+            insert initial line into table result assigning <result_line>.
+            do intend times.
+              <result_line> = <result_line> && ` `.
+            enddo.
+
+            <result_line> = |{ <result_line> }"{ <data_t_line> }"|.
+          else.
+            me->dumps( exporting json = <data_t_line> current_intend = intend
+                       importing result = result ).
+            read table result index lines( result ) assigning <result_line>.
+          endif.
+          if tabix < lines( data_t_tmp ).
+            <result_line> = <result_line> && `,`.
+          endif.
+
+        endloop.
+
+        subtract 4 from intend.
+        insert initial line into table result assigning <result_line>.
+        do intend times.
+          <result_line> = <result_line> && ` `.
+        enddo.
+        <result_line> = <result_line> && `]`.
+
+    endcase.
+
+  endmethod.                    "DUMPS
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Instance Private Method ZCL_JSON_DOCUMENT->ESCAPECHAR
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] JSON                           TYPE        STRING
@@ -595,6 +740,7 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
     data: data_descr  type ref to cl_abap_datadescr.
     data: lr_json_doc type ref to zcl_json_document.
     data: lv_json     type string.
+    data: tmp         type c length 10.
 
     if json is not initial.
       lv_json = json.
@@ -624,10 +770,18 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
       or   data_descr->typekind_packed
 
       or   data_descr->typekind_date
-      or   data_descr->typekind_time
       or   data_descr->typekind_xstring.     "(should work, not tested yet) #uf
 
         data = lr_json_doc->get_json( ).
+
+      when data_descr->typekind_time.
+
+        tmp = lr_json_doc->get_json( ).
+        if tmp cs ':'.
+          replace all occurrences of ':' in tmp with ``.
+        endif.
+
+        data =  tmp.
 
       when data_descr->typekind_struct1     "flat strcuture
       or   data_descr->typekind_struct2.     "deep strcuture
@@ -1135,4 +1289,4 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
     parse( ).
 
   endmethod.                    "SET_JSON
-ENDCLASS.
+endclass.                    "ZCL_JSON_DOCUMENT IMPLEMENTATION
