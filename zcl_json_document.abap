@@ -876,23 +876,10 @@ class zcl_json_document implementation.
         if sy-subrc = 0.
 *        me->json = `{` && me->json .            ">= 7.02
           concatenate '{' me->json into me->json.             "<= 7.01
+          concatenate me->json '}' into me->json.
         endif.
       endif.
 
-      data len type i.
-      len = strlen( me->json ) - 1.
-
-      if  me->json+len(1) ne `}`
-      and me->json+len(1) ne `]`.  "sapcodexch issue #7
-
-        "*--- key/value pair only (sapcodexch issue #3) ---*
-        find regex '"*":' in me->json.
-        if sy-subrc = 0.
-*      me->json =   me->json && `}`.           ">= 7.02
-          concatenate me->json '}'  into me->json.            "<= 7.01
-        endif.
-
-      endif.
     endif.
     json = me->json.
 

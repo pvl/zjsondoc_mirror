@@ -33,7 +33,9 @@ class lcl_zjson definition final for testing
              test_number_struct       for testing,
              test_append_data         for testing,
              test_string_table        for testing,
-             test_stru_table          for testing.
+             test_stru_table          for testing,
+             test_stru_table_named    for testing,
+             test_parse_list_strings  for testing.
 
 endclass.                    "lcl_zjson DEFINITION
 
@@ -248,7 +250,7 @@ class lcl_zjson implementation.
     json_doc->append_data( data = s_string iv_name = 's_string' ).
     json_str = json_doc->get_json( ).
     cl_aunit_assert=>assert_equals(
-        exp = '{"s_int":{"i" :10}, "s_string":{"s" :"abc"}'
+        exp = '{"s_int":{"i" :10}, "s_string":{"s" :"abc"}}'
         act = json_str ).
 
   endmethod.                    "test_append_data
@@ -273,5 +275,49 @@ class lcl_zjson implementation.
                                     act = strtab2 ).
 
   endmethod.                    "test_stru_table
+
+  method test_stru_table_named.
+
+    data: str     type t_string,
+          strtab  type table of t_string,
+          strtab2 type table of t_string.
+
+    str-s = '0010'. append str to strtab.
+    str-s = '00xx'. append str to strtab.
+    str-s = '0030'. append str to strtab.
+
+
+
+    json_doc = zcl_json_document=>create( ).
+    json_doc->append_data( data = strtab
+                           iv_name = 'dataname' ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = '{"dataname": [{"s" :"0010"},{"s" :"00xx"},{"s" :"0030"}]}'
+                                    act = json_str ).
+
+  endmethod.                    "test_stru_table_named
+
+  method test_parse_list_strings.
+    data: json_input type string,
+          has_next   type boolean.
+
+    json_input = '["value1","value2","value3"]'.
+    json_doc = zcl_json_document=>create_with_json( json_input ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value1'
+                                    act = json_str ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value2'
+                                    act = json_str ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value3'
+                                    act = json_str ).
+    has_next = json_doc->get_next( ).
+    cl_aunit_assert=>assert_equals( exp = ''
+                                    act = has_next ).
+  endmethod.                    "test_parse_list_strings
 
 endclass.                    "lcl_zjson IMPLEMENTATION
