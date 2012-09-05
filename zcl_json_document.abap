@@ -34,6 +34,11 @@ class zcl_json_document definition
     methods set_data
       importing
         !data type any .
+    methods get_data
+      importing
+        !json type string optional
+      exporting
+        !data type any .
     methods append_data
       importing
         !data type any
@@ -52,9 +57,9 @@ class zcl_json_document definition
         !key type string
       returning
         value(value) type i .
+  protected section.
 *"* protected components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
-  protected section.
   private section.
 *"* private components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
@@ -106,6 +111,12 @@ class zcl_json_document definition
     methods add_time
       importing
         !time type t .
+    methods get_stru
+      changing
+        !line type any .
+    methods get_table
+      changing
+        !table type any table .
 ENDCLASS.
 
 
@@ -245,15 +256,15 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
     data: lv_string type string.
 
-    lv_string = string.
-
     "*--- JSON conform conversion ---*
-    replace all occurrences of '"' in lv_string with ''.
+    "*--- sapcodexch issue #4 ---*
+    lv_string = string.   "convert to string
+    lv_string = cl_http_utility=>if_http_utility~escape_javascript( lv_string ).
 
     concatenate
       json
       '"'
-      string
+      lv_string
       '"'
     into json.
 
@@ -574,6 +585,79 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON_DOCUMENT->GET_DATA
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] JSON                           TYPE        STRING(optional)
+* | [<---] DATA                           TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method get_data.
+
+    data: data_descr  type ref to cl_abap_datadescr.
+    data: lr_json_doc type ref to zcl_json_document.
+    data: lv_json     type string.
+
+    if json is not initial.
+      lv_json = json.
+    else.
+      lv_json = me->json.
+    endif.
+
+    "*--- create new JSON document (recursive!) ---*
+    lr_json_doc = zcl_json_document=>create_with_json( lv_json ).
+    lr_json_doc->parse( ).
+
+    data_descr ?= cl_abap_typedescr=>describe_by_data( data ).
+
+    case data_descr->type_kind.
+
+      when data_descr->typekind_num          "charlike incl. NUMC
+      or   data_descr->typekind_char
+      or   data_descr->typekind_string
+      or   data_descr->typekind_clike
+      or   data_descr->typekind_csequence
+
+      or   data_descr->typekind_int          "integer + packed (auto conversion)
+      or   data_descr->typekind_int1
+      or   data_descr->typekind_int2
+      or   data_descr->typekind_packed
+
+      or   data_descr->typekind_date
+      or   data_descr->typekind_time
+      or   data_descr->typekind_xstring.     "(should work, not tested yet) #uf
+
+        data = lr_json_doc->get_json( ).
+
+      when data_descr->typekind_struct1     "flat strcuture
+      or   data_descr->typekind_struct2.     "deep strcuture
+
+        lr_json_doc->get_stru( changing line = data ).
+
+      when data_descr->typekind_table.       "table
+
+        lr_json_doc->get_table( changing table = data ).
+
+*    WHEN data_descr->typekind_dref.
+*    WHEN data_descr->typekind_hex.
+*    WHEN data_descr->typekind_float.
+*    WHEN data_descr->typekind_w.
+*    WHEN data_descr->typekind_oref.
+*    WHEN data_descr->typekind_class.
+*    WHEN data_descr->typekind_intf.
+*    WHEN data_descr->typekind_any.
+*    WHEN data_descr->typekind_data.
+*    WHEN data_descr->typekind_simple.
+*    WHEN data_descr->typekind_xsequence.
+*    WHEN data_descr->typekind_numeric.
+*    WHEN data_descr->typekind_iref.
+
+*    WHEN OTHERS.
+
+    endcase.
+
+  endmethod.                    "GET_DATA
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Instance Public Method ZCL_JSON_DOCUMENT->GET_JSON
 * +-------------------------------------------------------------------------------------------------+
 * | [<-()] JSON                           TYPE        STRING
@@ -583,14 +667,23 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
     if me->json is initial.
     else.
       if me->json+0(1) ne `{`.
-*      me->json = `{` && me->json .            ">= 7.02
-        concatenate '{' me->json into me->json.  "<= 7.01
+
+        "*--- key/value pair only (sapcodexch issue #3) ---*
+        find regex '"*":' in me->json.
+        if sy-subrc = 0.
+*        me->json = `{` && me->json .            ">= 7.02
+          concatenate '{' me->json into me->json.             "<= 7.01
+        endif.
       endif.
       data len type i.
       len = strlen( me->json ) - 1.
       if me->json+len(1) ne `}`.
+        "*--- key/value pair only (sapcodexch issue #3) ---*
+        find regex '"*":' in me->json.
+        if sy-subrc = 0.
 *      me->json =   me->json && `}`.           ">= 7.02
-        concatenate me->json '}'  into me->json. "<= 7.01
+          concatenate me->json '}'  into me->json.            "<= 7.01
+        endif.
       endif.
     endif.
     json = me->json.
@@ -696,6 +789,95 @@ CLASS ZCL_JSON_DOCUMENT IMPLEMENTATION.
     endif.
 
   endmethod.                    "GET_OFFSET_CLOSE
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_JSON_DOCUMENT->GET_STRU
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] LINE                           TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method get_stru.
+
+    data: stru_descr   type ref to cl_abap_structdescr
+        , comp_name    type string
+        , lv_json      type string
+        .
+
+    field-symbols: <value> type any
+                 , <component> type abap_compdescr
+                 .
+
+    stru_descr ?= cl_abap_typedescr=>describe_by_data( line ).
+
+    loop at stru_descr->components
+      assigning <component>.
+
+      assign component <component>-name of structure line to <value>.
+
+      comp_name = <component>-name.
+      translate comp_name to lower case.
+      lv_json = me->get_value( comp_name ).
+
+      "*--- and again -> recursive! ---*
+      me->get_data(
+        exporting json = lv_json
+        importing data = <value>
+        ).
+
+    endloop.
+
+  endmethod.                    "GET_STRU
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_JSON_DOCUMENT->GET_TABLE
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] TABLE                          TYPE        ANY TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method get_table.
+
+    data: table_descr  type ref to cl_abap_tabledescr
+        , stru_descr   type ref to cl_abap_structdescr
+        , comp_name    type string
+        , lv_json      type string
+        .
+
+    field-symbols: <value> type any
+                 , <line>  type any
+                 , <component> type abap_compdescr
+                 .
+
+    table_descr ?= cl_abap_typedescr=>describe_by_data( table ).
+
+    "*--- currently only standard tables possible (no hashed/sorted) ---*
+    check table_descr->table_kind = table_descr->tablekind_std.
+
+    stru_descr ?= table_descr->get_table_line_type( ).
+
+    while me->get_next( ) is not initial.
+
+      insert initial line into table table assigning <line>.
+
+      loop at stru_descr->components
+        assigning <component>.
+
+        assign component <component>-name of structure <line> to <value>.
+
+        comp_name = <component>-name.
+        translate comp_name to lower case.
+        lv_json = me->get_value( comp_name ).
+
+        "*--- and again -> recursive! ---*
+        me->get_data(
+          exporting json = lv_json
+          importing data = <value>
+          ).
+
+      endloop.
+
+    endwhile.
+
+  endmethod.                    "GET_TABLE
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
