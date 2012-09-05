@@ -123,7 +123,7 @@ class zcl_json_document definition
     methods get_table
       changing
         !table type any table .
-endclass.                    "ZCL_JSON_DOCUMENT DEFINITION
+endclass.                    "zcl_json_document DEFINITION
 
 
 
@@ -271,6 +271,10 @@ class zcl_json_document implementation.
     "*--- sapcodexch issue #4 ---*
     lv_string = string.   "convert to string
     lv_string = cl_http_utility=>if_http_utility~escape_javascript( lv_string ).
+
+    "*--- don't escape single quotes ---*
+    "*--- sapcodexch issue #11 ---*
+    replace all occurrences of '\''' in lv_string with ''''.
 
     concatenate
       json
@@ -620,18 +624,27 @@ class zcl_json_document implementation.
 
           <result_line> = |{ <result_line> }"{ <data_line>-key }" : |.
 
-          if <data_line>-value(1) cn '{['.
+          if <data_line>-value is initial.
+
+            <result_line> = |{ <result_line> }""|.
+
+          elseif <data_line>-value(1) cn '{['.
+
             if <data_line>-value co '0123456789.'.
               <result_line> = |{ <result_line> }{ <data_line>-value }|.
             else.
               <result_line> = |{ <result_line> }"{ <data_line>-value }"|.
             endif.
+
           else.
+
             me->dumps( exporting json = <data_line>-value current_intend = intend
                        importing result = dump ).
             insert lines of dump into table result.
             read table result index lines( result ) assigning <result_line>.
+
           endif.
+
           if tabix < lines( data_tmp ).
             <result_line> = <result_line> && `,`.
           endif.
