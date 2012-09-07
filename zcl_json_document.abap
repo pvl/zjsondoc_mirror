@@ -594,6 +594,7 @@ class zcl_json_document implementation.
         , intend     type i
         , tabix      type sytabix
         , dump       type string_table
+        , reslines   type i
         .
 
     field-symbols: <data_line>   type zjson_key_value
@@ -618,9 +619,11 @@ class zcl_json_document implementation.
 
         insert initial line into table result assigning <result_line>.
         do intend times.
-          <result_line> = <result_line> && ` `.
+*        <result_line> = <result_line> && ` `.    " >= 7.02
+          concatenate <result_line> ` ` into <result_line>.
         enddo.
-        <result_line> = <result_line> && `{`.
+*      <result_line> = <result_line> && `{`.      " >= 7.02
+        concatenate <result_line> `{` into <result_line>.
         add 4 to intend.
 
         clear tabix.
@@ -634,22 +637,28 @@ class zcl_json_document implementation.
 
           insert initial line into table result assigning <result_line>.
           do intend times.
-            <result_line> = <result_line> && ` `.
+*          <result_line> = <result_line> && ` `.   " >= 7.02
+            concatenate <result_line> ` ` into <result_line>.
           enddo.
 
-          <result_line> = |{ <result_line> }"{ <data_line>-key }" : |.
+*        <result_line> = |{ <result_line> }"{ <data_line>-key }" : |.  " >= 7.02
+          concatenate <result_line> '"' <data_line>-key '" :' into <result_line>.
+
 
           if <data_line>-value is initial.
 
-            <result_line> = |{ <result_line> }""|.
+*          <result_line> = |{ <result_line> }""|.  " >= 7.02
+            concatenate <result_line> '""' into <result_line>.
 
           elseif <data_line>-value(1) cn '{['.
 
             if <data_line>-value co '0123456789.'
             and <data_line>-value(1) <> '0'.        "no leading zero (else asume a string)
-              <result_line> = |{ <result_line> }{ <data_line>-value }|.
+*            <result_line> = |{ <result_line> }{ <data_line>-value }|.  " >= 7.02
+              concatenate <result_line> <data_line>-value into <result_line>.
             else.
-              <result_line> = |{ <result_line> }"{ <data_line>-value }"|.
+*            <result_line> = |{ <result_line> }"{ <data_line>-value }"|.
+              concatenate <result_line> '"' <data_line>-value '"' into <result_line>.
             endif.
 
           else.
@@ -658,12 +667,15 @@ class zcl_json_document implementation.
             json_doc->dumps( exporting current_intend = intend
                              importing result = dump ).
             insert lines of dump into table result.
-            read table result index lines( result ) assigning <result_line>.
 
+*          READ TABLE result INDEX lines( result ) ASSIGNING <result_line>.  " >= 7.02
+            describe table result lines reslines.
+            read table result index reslines assigning <result_line>.
           endif.
 
           if tabix < lines( data_tmp ).
-            <result_line> = <result_line> && `,`.
+*          <result_line> = <result_line> && `,`.   " >= 7.02
+            concatenate <result_line> `,` into <result_line>.
           endif.
 
         endloop.
@@ -671,18 +683,22 @@ class zcl_json_document implementation.
         subtract 4 from intend.
         insert initial line into table result assigning <result_line>.
         do intend times.
-          <result_line> = <result_line> && ` `.
+*        <result_line> = <result_line> && ` `.   " >= 7.02
+          concatenate <result_line> ` ` into <result_line>.
         enddo.
-        <result_line> = <result_line> && `}`.
+*      <result_line> = <result_line> && `}`.     " >= 7.02
+        concatenate <result_line> `}` into <result_line>.
 
       when '['.
         parse_array( ).
 
         insert initial line into table result assigning <result_line>.
         do intend times.
-          <result_line> = <result_line> && ` `.
+*        <result_line> = <result_line> && ` `.   " >= 7.02
+          concatenate <result_line> ` ` into <result_line>.
         enddo.
-        <result_line> = <result_line> && `[`.
+*      <result_line> = <result_line> && `[`.     " >= 7.02
+        concatenate <result_line> `[` into <result_line>.
         add 4 to intend.
 
         clear tabix.
@@ -697,20 +713,25 @@ class zcl_json_document implementation.
           if <data_t_line>(1) cn '{['.
             insert initial line into table result assigning <result_line>.
             do intend times.
-              <result_line> = <result_line> && ` `.
+*            <result_line> = <result_line> && ` `.   " >= 7.02
+              concatenate <result_line> ` ` into <result_line>.
             enddo.
 
-            <result_line> = |{ <result_line> }"{ <data_t_line> }"|.
+*          <result_line> = |{ <result_line> }"{ <data_t_line> }"|.  " >= 7.02
+            concatenate <result_line> '"' <data_t_line> '"' into <result_line>.
           else.
             clear dump.
             json_doc = zcl_json_document=>create_with_json( <data_t_line> ).
             json_doc->dumps( exporting current_intend = intend
                              importing result = dump ).
             insert lines of dump into table result.
-            read table result index lines( result ) assigning <result_line>.
+*          READ TABLE result INDEX lines( result ) ASSIGNING <result_line>.  " >= 7.02
+            describe table result lines reslines.
+            read table result index reslines assigning <result_line>.
           endif.
           if tabix < lines( data_t_tmp ).
-            <result_line> = <result_line> && `,`.
+*          <result_line> = <result_line> && `,`.    " >= 7.02
+            concatenate <result_line> `,` into <result_line>.
           endif.
 
         endloop.
@@ -718,9 +739,11 @@ class zcl_json_document implementation.
         subtract 4 from intend.
         insert initial line into table result assigning <result_line>.
         do intend times.
-          <result_line> = <result_line> && ` `.
+*        <result_line> = <result_line> && ` `.  " >= 7.02
+          concatenate <result_line> ` ` into <result_line>.
         enddo.
-        <result_line> = <result_line> && `]`.
+*      <result_line> = <result_line> && `]`.    " >= 7.02
+        concatenate <result_line> `]` into <result_line>.
 
     endcase.
 
