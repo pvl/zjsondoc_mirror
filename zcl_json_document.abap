@@ -802,7 +802,7 @@ class zcl_json_document implementation.
         data = lr_json_doc->get_json( ).
 
         "*--- eliminate surrounding " ---*
-        find regex '"(.{1,})"' in data     "get 1-n chars surrounded by "
+        find regex '^"(.{1,})"' in data     "get 1-n chars surrounded by quot.marks (sapcodexch issue #22)
           submatches lv_submatch.
 
         if sy-subrc = 0.
