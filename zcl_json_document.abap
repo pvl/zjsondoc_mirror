@@ -256,6 +256,10 @@ class zcl_json_document implementation.
 
     "*--- store NUMC without leading zero (sapcodexch #issue 17) ---*
     shift lv_num_c left deleting leading '0'.
+    "*--- if all numbers are deleted, set lv_num_c to zero
+    if lv_num_c is initial.
+      lv_num_c = '0'.
+    endif.
 
     condense lv_num_c no-gaps.
 
