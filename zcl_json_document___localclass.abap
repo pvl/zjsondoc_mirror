@@ -17,9 +17,7 @@ types: begin of t_int,
 *----------------------------------------------------------------------*
 *       CLASS lcl_zjson DEFINITION
 *----------------------------------------------------------------------*
-class lcl_zjson definition final for testing
-  duration short
-  risk level harmless.
+class lcl_zjson definition final for testing. "#AU Risk_Level Harmless
 
   private section.
     data: json_doc  type ref to zcl_json_document,
