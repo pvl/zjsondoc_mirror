@@ -26,6 +26,8 @@ class zcl_json_document definition
         !suppress_itab type boolean optional
       returning
         value(json_document) type ref to zcl_json_document .
+    class-methods get_version
+        returning value(version) type string.
     methods set_json
       importing
         !json type string .
@@ -74,6 +76,8 @@ class zcl_json_document definition
   private section.
 *"* private components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
+
+    constants co_version type string value '0.2.12'.
 
     data json type string .
     data data type zjson_key_value_t .
@@ -256,6 +260,11 @@ class zcl_json_document implementation.
 
     "*--- store NUMC without leading zero (sapcodexch #issue 17) ---*
     shift lv_num_c left deleting leading '0'.
+
+    "*--- if all numbers are deleted, set lv_num_c to zero
+    if lv_num_c is initial.
+      lv_num_c = '0'.
+    endif.
 
     condense lv_num_c no-gaps.
 
@@ -866,34 +875,21 @@ class zcl_json_document implementation.
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method get_json.
 
-    if me->json is initial.
-    else.
+    if me->json is not initial.
+
       if  me->json+0(1) ne `{`
       and me->json+0(1) ne `[`.    "sapcodexch issue #7
 
         "*--- key/value pair only (sapcodexch issue #3) ---*
         find regex '"*":' in me->json.
         if sy-subrc = 0.
-*        me->json = `{` && me->json .            ">= 7.02
-          concatenate '{' me->json into me->json.             "<= 7.01
+*        me->json = `{` && `}` && me->json .            ">= 7.02
+          concatenate '{' me->json '}' into me->json.             "<= 7.01
         endif.
       endif.
 
-      data len type i.
-      len = strlen( me->json ) - 1.
-
-      if  me->json+len(1) ne `}`
-      and me->json+len(1) ne `]`.  "sapcodexch issue #7
-
-        "*--- key/value pair only (sapcodexch issue #3) ---*
-        find regex '"*":' in me->json.
-        if sy-subrc = 0.
-*      me->json =   me->json && `}`.           ">= 7.02
-          concatenate me->json '}'  into me->json.            "<= 7.01
-        endif.
-
-      endif.
     endif.
+
     json = me->json.
 
     shift json left deleting leading space.
@@ -1167,6 +1163,18 @@ class zcl_json_document implementation.
     endif.
 
   endmethod.                    "GET_VALUE_INT
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_JSON_DOCUMENT=>GET_VERSION
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] VERSION                        TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method get_version.
+
+    version = co_version.
+
+  endmethod.                    "GET_VERSION
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+

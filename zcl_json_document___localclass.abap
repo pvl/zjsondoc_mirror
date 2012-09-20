@@ -12,7 +12,15 @@ types: begin of t_int,
        end of t_numc,
        begin of t_string,
          s type string,
-       end of t_string.
+       end of t_string,
+       begin of t_struc1,
+         i   type i,
+         nc  type n length 4,
+         p   type p length 10 decimals 2,
+         s   type string,
+         c1  type c length 1,
+         c20 type c length 20,
+       end of t_struc1.
 
 *----------------------------------------------------------------------*
 *       CLASS lcl_zjson DEFINITION
@@ -33,7 +41,10 @@ class lcl_zjson definition final for testing
              test_number_struct       for testing,
              test_append_data         for testing,
              test_string_table        for testing,
-             test_stru_table          for testing.
+             test_stru_table          for testing,
+             test_stru_table_named    for testing,
+             test_parse_list_strings  for testing,
+             test_parse_flat_object   for testing.
 
 endclass.                    "lcl_zjson DEFINITION
 
@@ -98,6 +109,16 @@ class lcl_zjson implementation.
     cl_aunit_assert=>assert_equals( exp = tnumc
                                     act = tnumc2 ).
 
+*   numc with just zeros
+    tnumc = '00000'.
+    json_doc = zcl_json_document=>create_with_data( tnumc ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = '0'
+                                    act = json_str ).
+    json_doc2 = zcl_json_document=>create_with_json( json_str ).
+    json_doc2->get_data( importing data = tnumc2 ).
+    cl_aunit_assert=>assert_equals( exp = tnumc
+                                    act = tnumc2 ).
 
   endmethod.                    "test_number
 
@@ -248,7 +269,7 @@ class lcl_zjson implementation.
     json_doc->append_data( data = s_string iv_name = 's_string' ).
     json_str = json_doc->get_json( ).
     cl_aunit_assert=>assert_equals(
-        exp = '{"s_int":{"i" :10}, "s_string":{"s" :"abc"}'
+        exp = '{"s_int":{"i" :10}, "s_string":{"s" :"abc"}}'
         act = json_str ).
 
   endmethod.                    "test_append_data
@@ -274,4 +295,74 @@ class lcl_zjson implementation.
 
   endmethod.                    "test_stru_table
 
+  method test_stru_table_named.
+
+    data: str     type t_string,
+          strtab  type table of t_string,
+          strtab2 type table of t_string.
+
+    str-s = '0010'. append str to strtab.
+    str-s = '00xx'. append str to strtab.
+    str-s = '0030'. append str to strtab.
+
+    json_doc = zcl_json_document=>create( ).
+    json_doc->append_data( data = strtab
+                           iv_name = 'dataname' ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = '{"dataname": [{"s" :"0010"},{"s" :"00xx"},{"s" :"0030"}]}'
+                                    act = json_str ).
+
+  endmethod.                    "test_stru_table_named
+
+  method test_parse_list_strings.
+    data: json_input type string,
+          has_next   type boolean.
+
+    json_input = '["value1","value2","value3"]'.
+    json_doc = zcl_json_document=>create_with_json( json_input ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value1'
+                                    act = json_str ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value2'
+                                    act = json_str ).
+    json_doc->get_next( ).
+    json_str = json_doc->get_json( ).
+    cl_aunit_assert=>assert_equals( exp = 'value3'
+                                    act = json_str ).
+    has_next = json_doc->get_next( ).
+    cl_aunit_assert=>assert_equals( exp = ''
+                                    act = has_next ).
+  endmethod.                    "test_parse_list_strings
+
+  method test_parse_flat_object.
+    data: json_input type string,
+          input_stru type t_struc1,
+          ref_stru type t_struc1.
+
+    json_input = '{"i":22,"nc":20,"c1":"X","c20":"test","s":"string test","p":20.5}'.
+    ref_stru-i = 22.
+    ref_stru-nc = 20.
+    ref_stru-c1 = 'X'.
+    ref_stru-c20 = 'test'.
+    ref_stru-s = 'string test'.
+    ref_stru-p = '20.5'.
+
+    json_doc = zcl_json_document=>create_with_json( json_input ).
+    json_doc->get_data( importing data = input_stru ).
+
+    cl_aunit_assert=>assert_equals( exp = ref_stru
+                                    act = input_stru ).
+
+    "test starting from a structure and getting the structure in the end
+    clear input_stru.
+    json_doc = zcl_json_document=>create_with_data( ref_stru ).
+    json_doc->get_data( importing data = input_stru ).
+
+    cl_aunit_assert=>assert_equals( exp = ref_stru
+                                    act = input_stru ).
+
+  endmethod.                    "test_parse_flat_object
 endclass.                    "lcl_zjson IMPLEMENTATION
