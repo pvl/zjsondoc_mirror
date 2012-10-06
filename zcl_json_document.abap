@@ -17,59 +17,74 @@ class zcl_json_document definition
         value(json_document) type ref to zcl_json_document .
     class-methods create_with_json
       importing
-        !json type string
+        json        type string
+        date_format type char10 optional
       returning
         value(json_document) type ref to zcl_json_document .
     class-methods create_with_data
       importing
-        !data type any
-        !suppress_itab type boolean optional
+        data type any
+        suppress_itab type boolean optional
+        date_format   type char10 optional
       returning
         value(json_document) type ref to zcl_json_document .
     class-methods get_version
         returning value(version) type string.
     methods set_json
       importing
-        !json type string .
+        json        type string
+        date_format type char10 optional .
     methods get_json
       returning
         value(json) type string .
+    methods get_json_large
+      exporting
+        json type string.
     methods set_data
       importing
-        !data type any
-        !suppress_itab type boolean optional .
+        data type any
+        suppress_itab type boolean optional
+        date_format   type char10  optional.
     methods get_data
       importing
-        !json type string optional
+        json type string optional
       exporting
-        !data type any .
+        data type any .
     methods append_data
       importing
-        !data type any
-        !iv_name type string .
+        data type any
+        iv_name type string .
     methods get_next
       returning
         value(data_found) type boolean .
     methods reset_cursor .
     methods get_value
       importing
-        !key type string
+        key type string
       returning
         value(value) type string .
     methods get_value_int
       importing
-        !key type string
+        key type string
       returning
         value(value) type i .
     methods dumps
       importing
-        !json type string optional
-        !current_intend type i optional
+        json type string optional
+        current_intend type i optional
       exporting
-        !result type string_table .
+        result type string_table .
     methods set_suppress_itab
       importing
-        !suppress_itab type boolean .
+        suppress_itab type boolean .
+    methods set_date_format
+      importing
+        date_format type char10.
+
+    methods set_namespace_conversion
+      importing
+        namespace_1_slash_replace type c
+        namespace_2_slash_replace type c.
   protected section.
 *"* protected components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
@@ -77,62 +92,70 @@ class zcl_json_document definition
 *"* private components of class ZCL_JSON_DOCUMENT
 *"* do not include other source files here!!!
 
-    constants co_version type string value '0.2.12'.
+    constants co_version type string value '0.2.13'.
 
-    data json type string .
-    data data type zjson_key_value_t .
-    data data_t type string_table .
-    data array_cursor type i .
-    data suppress_itab type boolean .
+    data json                      type string .
+    data data                      type zjson_key_value_t .
+    data data_t                    type string_table .
+    data array_cursor              type i .
+    data suppress_itab             type boolean .
+    data date_format               type char10.
+    data namespace_replace_pattern type string.
 
     class-methods copyright .
     methods parse
       importing
-        !json type string optional .
+        json type string optional .
     methods parse_object .
     methods parse_array .
     methods get_offset_close
       importing
-        !json type string
-        !offset_open type i default 0
+        json type string
+        offset_open type i default 0
       returning
         value(offset_close) type i .
     methods escapechar
       importing
-        !json type string
-        !offset type i
+        json type string
+        offset type i
       changing
-        !match_result type match_result_tab .
+        match_result type match_result_tab .
     methods add_data
       importing
-        !data type any .
+        data type any .
     methods add_table
       importing
-        !table type any table .
+        table type any table .
     methods add_stru
       importing
-        !line type any .
+        line type any .
     methods add_string
       importing
-        !string type any .
+        string type any .
     methods add_xstring
       importing
-        !xstring type any .
+        xstring type any .
     methods add_number
       importing
-        !number type any .
+        number type any .
     methods add_date
       importing
-        !date type d .
+        date type d .
     methods add_time
       importing
-        !time type t .
+        time type t .
     methods get_stru
       changing
-        !line type any .
+        line type any .
     methods get_table
       changing
-        !table type any table .
+        table type any table .
+    methods format_date
+      importing
+        date type d
+      returning value(date_formatted) type char10.
+    methods replace_namespace
+      changing key type abap_compname.
 endclass.                    "zcl_json_document DEFINITION
 
 
@@ -228,8 +251,7 @@ class zcl_json_document implementation.
 
     data: lv_date_c type c length 10.
 
-*  lv_date_c = |{ date DATE = raw }|.   ">= 7.02 only
-    lv_date_c = date.                                         "<= 7.01
+    lv_date_c = format_date( date ).
 
     concatenate
       json
@@ -338,6 +360,8 @@ class zcl_json_document implementation.
 
       comp_name = <component>-name.
       translate comp_name to lower case.
+
+      replace_namespace( changing key = comp_name ).
 
       if comp_name = 'parameter_id'.
 *      lv_parameter_id = |{ <value> }|.   ">= 7.02
@@ -560,6 +584,7 @@ class zcl_json_document implementation.
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] DATA                           TYPE        ANY
 * | [--->] SUPPRESS_ITAB                  TYPE        BOOLEAN(optional)
+* | [--->] DATE_FORMAT                    TYPE        CHAR10(optional)
 * | [<-()] JSON_DOCUMENT                  TYPE REF TO ZCL_JSON_DOCUMENT
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method create_with_data.
@@ -568,6 +593,7 @@ class zcl_json_document implementation.
     json_document->set_data(
       data          = data
       suppress_itab = suppress_itab
+      date_format   = date_format
       ).
 
   endmethod.                    "CREATE_WITH_DATA
@@ -577,12 +603,17 @@ class zcl_json_document implementation.
 * | Static Public Method ZCL_JSON_DOCUMENT=>CREATE_WITH_JSON
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] JSON                           TYPE        STRING
+* | [--->] DATE_FORMAT                    TYPE        CHAR10(optional)
 * | [<-()] JSON_DOCUMENT                  TYPE REF TO ZCL_JSON_DOCUMENT
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method create_with_json.
 
     create object json_document.
-    json_document->set_json( json ).
+    json_document->set_json(
+      exporting
+        json        = json
+        date_format = date_format
+    ).
 
   endmethod.                    "CREATE_WITH_JSON
 
@@ -774,6 +805,51 @@ class zcl_json_document implementation.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_JSON_DOCUMENT->FORMAT_DATE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] DATE                           TYPE        D
+* | [<-()] DATE_FORMATTED                 TYPE        CHAR10
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method format_date.
+
+    data: i   type i,
+          fmt type c length 10.
+
+    if date_format is initial.
+      date_formatted = date.
+
+    else.
+
+      fmt = date_format.
+
+      if fmt cs 'YYYY'.
+        write date(4) to date_formatted+sy-fdpos(4).
+      elseif fmt cs 'YY'.
+        write date+2(2) to date_formatted+sy-fdpos(2).
+      endif.
+      if fmt cs 'MM'.
+        write date+4(2) to date_formatted+sy-fdpos(2).
+      endif.
+      if fmt cs 'DD'.
+        write date+6(2) to date_formatted+sy-fdpos(2).
+      endif.
+
+* delimiter
+      i = 0.
+      while not fmt is initial.
+        if fmt(1) na 'YMD'.
+          write fmt(1) to date_formatted+i(1).
+        endif.
+        shift fmt left.
+        i = i + 1.
+      endwhile.
+
+    endif.
+
+  endmethod.                    "FORMAT_DATE
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Instance Public Method ZCL_JSON_DOCUMENT->GET_DATA
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] JSON                           TYPE        STRING(optional)
@@ -785,6 +861,7 @@ class zcl_json_document implementation.
     data: lr_json_doc type ref to zcl_json_document.
     data: lv_json     type string.
     data: tmp         type c length 10.
+    data: tmp_s       type string.
     data: lv_submatch type string.
 
     if json is not initial.
@@ -796,7 +873,11 @@ class zcl_json_document implementation.
     clear data.
 
     "*--- create new JSON document (recursive!) ---*
-    lr_json_doc = zcl_json_document=>create_with_json( lv_json ).
+    lr_json_doc = zcl_json_document=>create_with_json(
+        json          = lv_json
+        date_format   = me->date_format
+    ).
+
     lr_json_doc->parse( ).
 
     data_descr ?= cl_abap_typedescr=>describe_by_data( data ).
@@ -808,7 +889,12 @@ class zcl_json_document implementation.
       or   data_descr->typekind_clike
       or   data_descr->typekind_csequence.
 
-        data = lr_json_doc->get_json( ).
+        lr_json_doc->get_json_large(
+          importing
+            json = tmp_s
+        ).
+
+        data = tmp_s.
 
         "*--- eliminate surrounding " ---*
         find regex '^"(.{1,})"' in data     "get 1-n chars surrounded by quot.marks (sapcodexch issue #22)
@@ -823,20 +909,24 @@ class zcl_json_document implementation.
       or   data_descr->typekind_int1
       or   data_descr->typekind_int2
       or   data_descr->typekind_packed
-
-      or   data_descr->typekind_date
       or   data_descr->typekind_xstring.     "(should work, not tested yet) #uf
 
-        data = lr_json_doc->get_json( ).
+        lr_json_doc->get_json_large(
+          importing
+            json = tmp_s
+        ).
+
+        data = tmp_s.
 
       when data_descr->typekind_time.
 
-        tmp = lr_json_doc->get_json( ).
-        if tmp cs ':'.
-          replace all occurrences of ':' in tmp with ``.
-        endif.
+        lr_json_doc->get_json_large(
+          importing
+            json = tmp_s
+        ).
 
-        data =  tmp.
+        replace all occurrences of ':' in tmp_s with ``.
+        data = tmp_s.
 
       when data_descr->typekind_struct1     "flat strcuture
       or   data_descr->typekind_struct2.     "deep strcuture
@@ -847,6 +937,37 @@ class zcl_json_document implementation.
 
         lr_json_doc->get_table( changing table = data ).
 
+      when data_descr->typekind_date.
+
+        lr_json_doc->get_json_large(
+          importing
+            json = tmp_s
+        ).
+
+        tmp = tmp_s.
+
+        if date_format is initial.
+          data = tmp.
+        else.
+          if date_format cs 'YYYY'.
+            data(4) = tmp+sy-fdpos(4).
+          else.
+            find 'YY' in date_format.
+            concatenate
+              '20'
+              tmp+sy-fdpos(2)
+            into data(4).
+          endif.
+
+          if date_format cs 'MM'.
+            data+4(2) = tmp+sy-fdpos(2).
+          endif.
+
+          if date_format cs 'DD'.
+            data+6(2) = tmp+sy-fdpos(2).
+          endif.
+
+        endif.
 *    WHEN data_descr->typekind_dref.
 *    WHEN data_descr->typekind_hex.
 *    WHEN data_descr->typekind_float.
@@ -875,6 +996,21 @@ class zcl_json_document implementation.
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method get_json.
 
+    get_json_large(
+      importing
+        json = json
+    ).
+
+  endmethod.                    "GET_JSON
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON_DOCUMENT->GET_JSON_LARGE
+* +-------------------------------------------------------------------------------------------------+
+* | [<---] JSON                           TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method get_json_large.
+
     if me->json is not initial.
 
       if  me->json+0(1) ne `{`
@@ -893,7 +1029,8 @@ class zcl_json_document implementation.
     json = me->json.
 
     shift json left deleting leading space.
-  endmethod.                    "GET_JSON
+
+  endmethod.                    "GET_JSON_LARGE
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -1326,6 +1463,31 @@ class zcl_json_document implementation.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZCL_JSON_DOCUMENT->REPLACE_NAMESPACE
+* +-------------------------------------------------------------------------------------------------+
+* | [<-->] KEY                            TYPE        ABAP_COMPNAME
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method replace_namespace.
+
+    data namespace type string.
+
+    check namespace_replace_pattern is not initial.
+
+*    REPLACE REGEX `/(\w+)/` IN cv_key WITH mv_namespace_replace_pattern.  ">= 7.31
+
+    "*--- < 7.31 ---*
+    find regex `/(\w+)/` in key submatches namespace.
+
+    if namespace is not initial.
+      replace regex `/(\w+)/` in key with namespace_replace_pattern.
+      replace '&1' in key with namespace.
+      condense key.
+    endif.
+
+  endmethod.                    "REPLACE_NAMESPACE
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Instance Public Method ZCL_JSON_DOCUMENT->RESET_CURSOR
 * +-------------------------------------------------------------------------------------------------+
 * +--------------------------------------------------------------------------------------</SIGNATURE>
@@ -1341,10 +1503,17 @@ class zcl_json_document implementation.
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] DATA                           TYPE        ANY
 * | [--->] SUPPRESS_ITAB                  TYPE        BOOLEAN(optional)
+* | [--->] DATE_FORMAT                    TYPE        CHAR10(optional)
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method set_data.
 
-    set_suppress_itab( suppress_itab ).
+    if suppress_itab is supplied.
+      set_suppress_itab( suppress_itab ).
+    endif.
+
+    if date_format is supplied.
+      set_date_format( date_format ).
+    endif.
 
     clear json.
     add_data( data ).
@@ -1355,11 +1524,28 @@ class zcl_json_document implementation.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON_DOCUMENT->SET_DATE_FORMAT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] DATE_FORMAT                    TYPE        CHAR10
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method set_date_format.
+
+    me->date_format = date_format.
+
+  endmethod.                    "SET_DATE_FORMAT
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Instance Public Method ZCL_JSON_DOCUMENT->SET_JSON
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] JSON                           TYPE        STRING
+* | [--->] DATE_FORMAT                    TYPE        CHAR10(optional)
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method set_json.
+
+    if date_format is supplied.
+      set_date_format( date_format ).
+    endif.
 
     me->json = json.
 
@@ -1372,6 +1558,28 @@ class zcl_json_document implementation.
     parse( ).
 
   endmethod.                    "SET_JSON
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZCL_JSON_DOCUMENT->SET_NAMESPACE_CONVERSION
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] NAMESPACE_1_SLASH_REPLACE      TYPE        C
+* | [--->] NAMESPACE_2_SLASH_REPLACE      TYPE        C
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method set_namespace_conversion.
+
+    if  namespace_1_slash_replace is initial
+    and namespace_2_slash_replace is initial.
+      clear namespace_replace_pattern.
+    else.
+      concatenate
+        namespace_1_slash_replace
+        '&1'
+        namespace_2_slash_replace
+      into namespace_replace_pattern.
+    endif.
+
+  endmethod.                    "SET_NAMESPACE_CONVERSION
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+

@@ -20,7 +20,14 @@ types: begin of t_int,
          s   type string,
          c1  type c length 1,
          c20 type c length 20,
-       end of t_struc1.
+       end of t_struc1,
+       begin of t_date,
+         d type d,
+       end of t_date,
+       begin of t_namespace,
+         /cex/test type string,
+         test      type string,
+       end of t_namespace.
 
 *----------------------------------------------------------------------*
 *       CLASS lcl_zjson DEFINITION
@@ -44,7 +51,10 @@ class lcl_zjson definition final for testing
              test_stru_table          for testing,
              test_stru_table_named    for testing,
              test_parse_list_strings  for testing,
-             test_parse_flat_object   for testing.
+             test_parse_flat_object   for testing,
+             test_date_format         for testing,
+             test_date_format_reverse for testing,
+             test_namespace           for testing.
 
 endclass.                    "lcl_zjson DEFINITION
 
@@ -365,4 +375,171 @@ class lcl_zjson implementation.
                                     act = input_stru ).
 
   endmethod.                    "test_parse_flat_object
+
+  method test_date_format.
+
+    data input_stru type t_date.
+    data ref_stru   type t_date.
+    data json       type string.
+
+    input_stru-d = '20120927'.
+    json_doc = zcl_json_document=>create( ).
+
+    "*--- test standard JSON date format ---*
+    json_doc->set_data( input_stru ).
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"d" :"20120927"}'
+                                    act = json ).
+
+    "*--- test SUP date format ---*
+    json_doc->set_data(
+        data          = input_stru
+        date_format   = 'YYYY-MM-DD'
+    ).
+
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"d" :"2012-09-27"}'
+                                    act = json ).
+
+    "*--- test world date format ---*
+    json_doc->set_data(
+        data          = input_stru
+        date_format   = 'DD.MM.YYYY'
+    ).
+
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"d" :"27.09.2012"}'
+                                    act = json ).
+
+    "*--- test US date format ---*
+    json_doc->set_data(
+        data          = input_stru
+        date_format   = 'MM/DD/YYYY'
+    ).
+
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"d" :"09/27/2012"}'
+                                    act = json ).
+
+    "*--- test short date format ---*
+    json_doc->set_data(
+        data          = input_stru
+        date_format   = 'DDMMYY'
+    ).
+
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"d" :"270912"}'
+                                    act = json ).
+
+  endmethod.                    "test_date_format
+
+  method test_date_format_reverse.
+
+    data input_stru type t_date.
+    data ref_stru   type t_date.
+    data json       type string.
+
+    input_stru-d = '20120927'.
+    json_doc = zcl_json_document=>create( ).
+
+    "*--- test standard JSON date format ---*
+    json = '{"d" :"20120927"}'.
+    json_doc->set_json( json ).
+
+    json_doc->get_data(
+      importing
+        data = ref_stru
+    ).
+
+    cl_aunit_assert=>assert_equals( exp = input_stru
+                                    act = ref_stru ).
+
+    "*--- test SUP date format ---*
+    json = '{"d" :"2012-09-27"}'.
+    json_doc->set_json(
+      exporting
+        json        = json
+        date_format = 'YYYY-MM-DD'
+    ).
+
+    json_doc->get_data(
+      importing
+        data = ref_stru
+    ).
+
+    cl_aunit_assert=>assert_equals( exp = input_stru
+                                    act = ref_stru ).
+
+    "*--- test world date format ---*
+    json = '{"d" :"27.09.2012"}'.
+    json_doc->set_json(
+      exporting
+        json        = json
+        date_format = 'DD.MM.YYYY'
+    ).
+
+    json_doc->get_data(
+      importing
+        data = ref_stru
+    ).
+
+    cl_aunit_assert=>assert_equals( exp = input_stru
+                                    act = ref_stru ).
+
+    "*--- test US date format ---*
+    json = '{"d" :"09/27/2012"}'.
+    json_doc->set_json(
+      exporting
+        json        = json
+        date_format = 'MM/DD/YYYY'
+    ).
+
+    json_doc->get_data(
+      importing
+        data = ref_stru
+    ).
+
+    cl_aunit_assert=>assert_equals( exp = input_stru
+                                    act = ref_stru ).
+
+
+  endmethod.                    "test_date_format_reverse
+
+  method test_namespace.
+
+    data input_stru type t_namespace.
+    data json       type string.
+
+    input_stru-/cex/test = 'with namespace'.
+    input_stru-test = 'without namespace'.
+
+    json_doc = zcl_json_document=>create( ).
+
+    "*--- regular namespace ---*
+    json_doc->set_data( input_stru ).
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"/cex/test" :"with namespace","test" :"without namespace"}'
+                                    act = json ).
+
+    "*--- replace namespace ---*
+    json_doc->set_namespace_conversion(
+      exporting
+        namespace_1_slash_replace = ''
+        namespace_2_slash_replace = '_'
+    ).
+
+    json_doc->set_data( input_stru ).
+    json = json_doc->get_json( ).
+
+    cl_aunit_assert=>assert_equals( exp = '{"cex_test" :"with namespace","test" :"without namespace"}'
+                                    act = json ).
+
+  endmethod.                    "test_namespace
+
 endclass.                    "lcl_zjson IMPLEMENTATION
